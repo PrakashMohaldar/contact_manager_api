@@ -1,9 +1,8 @@
 const asyncHandler = require("express-async-handler");
 const Contact = require("../model/contactModel");
 
-
 const getContacts = asyncHandler(async (req, res)=>{
-    const contacts = await Contact.find();
+    const contacts = await Contact.find({user_id:req.user.id});
     res.status(200).json(contacts);
 })
 const createNewContact = asyncHandler(async (req, res)=>{
@@ -15,11 +14,20 @@ const createNewContact = asyncHandler(async (req, res)=>{
         res.status(404);
         throw newError("All fields are mandatory")
     }
-    const contact = await Contact.create({name, email, phone});
+    const existingContact = await Contact.findOne({ email });
+
+    if (existingContact) {
+        res.status(400);
+        throw new Error("Contact with the same email already exists");
+    }
+
+    const contact = await Contact.create({user_id:req.user.id,name, email, phone});
     
     res.status(200).json(req.body);
     
 })
+
+// access Private
 const getContact = asyncHandler(async (req, res)=>{
     const contact = await Contact.findById(req.params.id);
     if(!contact){
@@ -29,21 +37,32 @@ const getContact = asyncHandler(async (req, res)=>{
     res.status(200).json(contact);
 })
 const deleteContact = asyncHandler(async (req, res) => {
-    const contact = await Contact.findByIdAndRemove(req.params.id);
+    const contact = await Contact.findById(req.params.id);
   
     if (!contact) {
       res.status(404);
       throw new Error("Contact not found");
     }
-  
+      // checking whether different user is not trying to delete contact
+    if(contact.user_id.toString() !== req.user.id){
+        res.status(403);
+        throw new Error("You are not allowed to delete this contact");
+    }
+
+    await Contact.deleteOne({_id:req.params.id})
     res.status(200).json(contact);
   });
-  
+
 const updateContact =  asyncHandler(async (req, res)=>{
     const contact = await Contact.findById(req.params.id);
     if(!contact){
         res.status(404);
         throw new Error("Contact not found");
+    }
+    // checking whether different user is not trying to update contact
+    if(contact.user_id.toString() !== req.user.id){
+        res.status(403);
+        throw new Error("You are not allowed to update this contact");
     }
 
     const updatedContact = await Contact.findByIdAndUpdate(
